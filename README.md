@@ -35,7 +35,7 @@ ETH/ERC-20 轉帳：高度封裝 Web3j 介面，支援 Gas Fee 自動估算與�
 K8s 節點監控：即時監測運行在 Pod 內的 Beacon Node 與 Execution Node 狀態。
 
 💻 技術棧
-後端核心：Spring Boot 3.4 (Java 21)
+後端核心：Spring Boot 3.4 (Java 17)
 
 區塊鏈交互：Web3j, Ethers-Java, Spring-Cloud-Ethereum
 
