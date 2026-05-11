@@ -106,6 +106,42 @@ NFT 市場模組：擴充 ERC-721 與 ERC-1155 的鑄造、掛單與版稅管理
 
 多鏈跨鏈橋：增加對 BSC (Binance Smart Chain) 或 Polygon 的跨鏈數據監測。
 
+## 📅 2026.05.11 更新日誌：基礎設施增強
+
+本次更新完成了核心通訊組件的整合與 Docker 本地環境配置。
+
+### 1. 🚀 Kafka 非同步通訊整合
+* **配置優化**：實作 `KafkaConfig`，完成 `ProducerFactory` 與 `ConsumerFactory` 配置。
+* **序列化機制**：統一採用 Kafka 官方 `StringSerializer` 與 `StringDeserializer` 以解決類別轉換異常。
+* **監聽機制**：實作 `@KafkaListener` 異步監聽 `test-topic`，成功對接區塊鏈交易模擬數據。
+
+### 2. ⚡ Redis 快取與原子操作
+* **連線測試**：整合 `StringRedisTemplate` 成功連接 Docker 端的 Redis 服務。
+* **計數器實作**：透過 Redis 實作 `/redis` 測試 API，驗證在高併發環境下的原子性計數功能。
+
+### 3. 🐳 Docker 容器化配置
+* **編排部署**：完成 Kafka、Zookeeper 與 Redis 的 `docker-compose` 配置。
+* **數據持久化**：配置 Named Volumes (如 `redis_data`) 確保容器重啟後數據不丟失。
+
+### 4. 📝 日誌持久化系統
+* **自動存檔**：配置 Logback 自動將系統日誌寫入 `logs/eth2_system.log`。
+* **滾動策略**：支援按檔案大小 (10MB) 與保留天數 (7天) 自動切分日誌檔案。
+
+---
+
+## 📡 API 快速測試
+
+在專案啟動後，可使用以下指令驗證服務：
+
+| 功能 | 指令 | 預期回應 |
+| :--- | :--- | :--- |
+| **健康檢查** | `curl -X GET http://localhost:8080/eth/hello` | `ETH 2.0 Module is Running!` |
+| **Kafka 測試** | `curl -X GET http://localhost:8080/eth/client/api/kafka` | 觸發 Producer 並由 Listener 印出 Log |
+| **Redis 測試** | `curl -X GET http://localhost:8080/eth/client/api/redis` | `Redis 連線成功！目前計數值為: [X]` |
+
+---
+
+
 👨‍💻 維護者
 Project Owner: Leo
 
