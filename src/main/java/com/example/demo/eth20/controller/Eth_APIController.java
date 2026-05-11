@@ -2,6 +2,11 @@ package com.example.demo.eth20.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.web.bind.annotation.*;
 import java.util.*;
 
@@ -13,7 +18,11 @@ import java.util.*;
 @RequestMapping("eth/core/api")
 @Tag(name = "ETH 核心開發介面", description = "包含智能合約部署、錢包管理與節點通訊核心功能")
 public class Eth_APIController {
-
+	
+	
+	
+	
+	
     // 1. 錢包與金鑰認證 (Wallet & Key Auth)
     @Operation(summary = "1. 錢包私鑰認證", description = "驗證私鑰格式並檢查其在 AWS Secrets Manager 中的安全性")
     @PostMapping("/wallet/auth")
