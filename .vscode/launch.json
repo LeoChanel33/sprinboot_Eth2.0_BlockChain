@@ -1,0 +1,24 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "java",
+      "name": "Spring Boot: Local",
+      "request": "launch",
+      "mainClass": "com.example.demo.Application",
+      "projectName": "eth2.0.application",
+      "cwd": "${workspaceFolder}",
+      "args": "--spring.profiles.active=local",
+      "console": "integratedTerminal"
+    },
+    {
+      "type": "java",
+      "name": "Spring Boot: Full (Kafka + Redis)",
+      "request": "launch",
+      "mainClass": "com.example.demo.Application",
+      "projectName": "eth2.0.application",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal"
+    }
+  ]
+}

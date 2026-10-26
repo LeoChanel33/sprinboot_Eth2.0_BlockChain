@@ -1,6 +1,7 @@
 package com.example.demo.exception;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -16,7 +17,8 @@ public class GlobalExceptionHandler {
             "請求參數錯誤: " + ex.getMessage(),
             System.currentTimeMillis()
         );
-        return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .contentType(MediaType.APPLICATION_JSON).body(error);
     }
 
     // 處理所有其他未知的伺服器錯誤 (例如：節點掛了)
@@ -27,6 +29,7 @@ public class GlobalExceptionHandler {
             "系統發生異常，請聯繫管理員",
             System.currentTimeMillis()
         );
-        return new ResponseEntity<>(error, HttpStatus.INTERNAL_SERVER_ERROR);
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .contentType(MediaType.APPLICATION_JSON).body(error);
     }
 }

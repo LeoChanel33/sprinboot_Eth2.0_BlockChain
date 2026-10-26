@@ -1,5 +1,50 @@
+VS Code 開發與啟動：請參閱 [VSCODE.md](VSCODE.md)。
+
+## 2026-10-27 更新：VS Code 開發環境與 API 錯誤處理
+
+### 開發與啟動
+
+- 新增 VS Code 推薦擴充套件、F5 啟動／除錯、Maven 測試與打包工作設定。
+- 根目錄專案使用 **Java 17、Spring Boot 4.0.3、Maven Wrapper**，不需另外安裝 Maven。
+- 新增 `local` profile，停用 Kafka listener，方便在尚未啟動 Kafka、Redis 或資料庫時開發 HTTP API；Kafka／Redis 測試端點仍需要對應服務。
+- 修正 Windows Maven Wrapper 在一般目錄讀取空的 `Target` 屬性時無法啟動的問題。
+- 將 AOP starter 改為 Spring Boot 4 對應的 AspectJ starter，更新 springdoc 至 3.0.2，並移除重複的 Lombok 相依設定。
+- 移除 `ErrorResponse` 的重複空建構子，修正編譯錯誤並保留 Lombok 產生的完整建構子。
+
+在 VS Code 開啟根目錄，等待 Maven 匯入完成，選擇 **Spring Boot: Local** 並按 **F5**。也可以在 PowerShell 執行：
+
+```powershell
+.\mvnw.cmd spring-boot:run '-Dspring-boot.run.profiles=local'
+```
+
+服務啟動後才可開啟 [Swagger UI](http://localhost:8080/swagger-ui/index.html)。若出現 `ERR_CONNECTION_REFUSED`，請先確認服務已啟動且仍在執行。
+
+### API 例外處理
+
+- 移除過度限制的 `@ComponentScan`，使用 `@SpringBootApplication` 預設掃描，讓 `exception` 套件內的 `GlobalExceptionHandler` 正常載入。
+- 明確設定錯誤回應為 `application/json`，讓瀏覽器使用 `Accept: text/html` 呼叫時也能取得 JSON 錯誤內容。
+- `/eth/admin/api/test/error-500` 刻意拋出例外，預期狀態為 **HTTP 500**，並回傳以下結構；`timestamp` 隨請求時間變動：
+
+```json
+{
+  "status": 500,
+  "message": "系統發生異常，請聯繫管理員",
+  "timestamp": 1793038777261
+}
+```
+
+### 驗證結果
+
+- 執行 `.\mvnw.cmd test`：2 項測試通過，包含服務載入及瀏覽器請求的 JSON 500 回歸測試。
+- 實際確認 Swagger UI、`/v3/api-docs`、`/eth/client/api/contract/info` 回傳 HTTP 200。
+- 實際確認 `/eth/admin/api/test/error-500` 回傳 HTTP 500 與 JSON 錯誤內容。
+
+完整安裝、啟動及疑難排解步驟請見 [VSCODE.md](VSCODE.md)。`ai_springagent/` 為另一個獨立 Gradle 專案，本次 VS Code 工作區設定預設不匯入它。
+
+---
+
 🚀 ETH 2.0 Blockchain Backend API
-這是一個基於 Spring Boot 21 構建的高性能區塊鏈後端服務，專為 Ethereum 2.0 網路設計。本專案提供完整的權限控管、智慧合約交互與節點管理功能，並與前端 Nuxt 3 + Vue 3 (nuxt_Vue3_BlockChain) 進行全端整合，最終部署於 AWS Kubernetes (EKS) 環境。
+這是一個基於 Spring Boot 4.0.3 與 Java 17 構建的區塊鏈後端示範專案，專為 Ethereum 2.0 網路整合設計。目前多數區塊鏈 API 使用示範回傳值；下方列出功能規劃與整合方向，實際實作請以原始碼為準。
 
 📖 目錄
 核心功能

@@ -1,0 +1,86 @@
+{
+    "version":  "2.0.0",
+    "tasks":  [
+                  {
+                      "label":  "Maven: test",
+                      "type":  "shell",
+                      "command":  "./mvnw",
+                      "windows":  {
+                                      "command":  ".\\mvnw.cmd",
+                                      "options":  {
+                                                      "shell":  {
+                                                                    "executable":  "cmd.exe",
+                                                                    "args":  [
+                                                                                 "/d",
+                                                                                 "/c"
+                                                                             ]
+                                                                }
+                                                  }
+                                  },
+                      "args":  [
+                                   "test",
+                                   "-Dspring.profiles.active=local"
+                               ],
+                      "group":  {
+                                    "kind":  "test",
+                                    "isDefault":  true
+                                },
+                      "problemMatcher":  [
+
+                                         ]
+                  },
+                  {
+                      "label":  "Maven: package",
+                      "type":  "shell",
+                      "command":  "./mvnw",
+                      "windows":  {
+                                      "command":  ".\\mvnw.cmd",
+                                      "options":  {
+                                                      "shell":  {
+                                                                    "executable":  "cmd.exe",
+                                                                    "args":  [
+                                                                                 "/d",
+                                                                                 "/c"
+                                                                             ]
+                                                                }
+                                                  }
+                                  },
+                      "args":  [
+                                   "clean",
+                                   "package",
+                                   "-Dspring.profiles.active=local"
+                               ],
+                      "group":  {
+                                    "kind":  "build",
+                                    "isDefault":  true
+                                },
+                      "problemMatcher":  [
+
+                                         ]
+                  },
+                  {
+                      "label":  "Spring Boot: run local",
+                      "type":  "shell",
+                      "command":  "./mvnw",
+                      "windows":  {
+                                      "command":  ".\\mvnw.cmd",
+                                      "options":  {
+                                                      "shell":  {
+                                                                    "executable":  "cmd.exe",
+                                                                    "args":  [
+                                                                                 "/d",
+                                                                                 "/c"
+                                                                             ]
+                                                                }
+                                                  }
+                                  },
+                      "args":  [
+                                   "spring-boot:run",
+                                   "-Dspring-boot.run.profiles=local"
+                               ],
+                      "problemMatcher":  [
+
+                                         ]
+                  }
+              ]
+}

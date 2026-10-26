@@ -1,0 +1,7 @@
+{
+  "files.encoding": "utf8",
+  "java.configuration.updateBuildConfiguration": "automatic",
+  "java.import.exclusions": ["**/ai_springagent/**", "**/.cache/**"],
+  "java.import.gradle.enabled": false,
+  "maven.executable.preferMavenWrapper": true
+}
