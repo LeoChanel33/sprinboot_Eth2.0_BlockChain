@@ -39,17 +39,26 @@
 ## 服務架構
 
 ```text
-Client_APIController
-  └─ Sevices（統一入口與交易協調）
-      ├─ UserJpaService → UserAccountRepository → UserAccount
-      ├─ NodeJpaService → BlockchainNodeRepository → BlockchainNode
-      └─ CrossPlatformJpaService → PlatformAccountRepository → PlatformAccount
+controller/
+  Admin_APIController  → service/api/AdminApiService
+  Client_APIController → service/api/ClientApiService
+  Eth_APIController    → service/api/EthApiService
+
+service/api/ClientApiService（業務流程與交易協調）
+  ├─ service/jpa/UserJpaService → UserAccountRepository → UserAccount
+  ├─ service/jpa/NodeJpaService → BlockchainNodeRepository → BlockchainNode
+  └─ service/jpa/CrossPlatformJpaService → PlatformAccountRepository → PlatformAccount
+
+dto/（獨立的請求與回應資料型別）
 ```
 
-[Sevices](src/main/java/com/example/demo/eth20/service/Sevices.java) 使用 `@Service`、`@RequiredArgsConstructor` 與 `private final` 欄位，由 Spring 自動注入各功能服務。
+Controller 使用 Lombok `@RequiredArgsConstructor` 與 `private final` 欄位，直接注入對應的 API Service，僅處理 HTTP 參數及回應。
+`service/api` 負責業務流程；`service/jpa` 封裝資料驗證與持久化操作；`repository` 負責 JPA 資料存取。
+已移除原本的 `Services`／`Sevices` 中轉層，請求與回應型別獨立放在 `dto`，不再依附 Service 類別。
+Kafka listener 位於 `ClientApiService`，與 HTTP Controller 分離。
 各服務透過 Spring Data `JpaRepository` 存取資料；Entity 使用 Lombok `@Getter` 與 JPA 必要的 protected 無參數建構子，保留指定業務欄位的建構子。
 
-主要流程 `Sevices.register(...)` 在同一筆交易中建立使用者與選填的平台關聯；綁定失敗時註冊也會回滾。
+主要流程 `ClientApiService.registerUser(...)` 以 `@Transactional` 在同一筆交易中建立使用者與選填的平台關聯；綁定失敗時註冊也會回滾。
 帳號名稱與 email 會去除前後空白並轉小寫，另有重複檢查與資料庫唯一約束。節點狀態更新使用 `@Version` 處理並行寫入衝突。
 
 ## JPA API
@@ -111,7 +120,7 @@ Client_APIController
 .\mvnw.cmd package
 ```
 
-目前包含 6 項測試：應用程式啟動、瀏覽器請求 JSON 500 回應、註冊與平台綁定、交易回滾、重複帳號與不存在的使用者、節點狀態持久化與輸入驗證。
+目前包含 7 項測試，涵蓋應用程式啟動、三組 API 路由與服務注入、400 與 JSON 500 回應、註冊與平台綁定、交易回滾、重複帳號與不存在的使用者、節點狀態持久化與輸入驗證。
 
 ## 實作範圍
 
@@ -124,7 +133,11 @@ Client_APIController
 
 ## 2026-10-28 更新
 
-- 建立統一 `Sevices` 入口與三個 JPA 功能服務、Entity、Repository。
+- 分開 API 業務服務與 JPA 資料服務，整理獨立 DTO，移除多餘中轉層。
+- 三個 Controller 直接以建構子注入 `AdminApiService`、`ClientApiService`、`EthApiService`，業務方法集中於 `service/api`。
+- 資料操作封裝於 `service/jpa`，請求與回應型別放入 `dto`；移除 `Services`／`Sevices`，避免名稱與職責混淆。
+- 註冊與平台綁定的交易由 `ClientApiService.registerUser(...)` 協調，失敗時一起回滾；Kafka listener 移至 Client 業務服務。
+- 執行 Maven `clean test`，7 項測試全部通過，涵蓋三組 HTTP API、錯誤回應與 JPA 交易。
 - 新增使用者、節點、平台關聯 API，以及交易與衝突處理。
 - 啟用 PostgreSQL JDBC 連線，測試保留獨立 H2；本機密碼移至 Git 忽略的設定檔。
 - 更新 README，使啟動流程、功能範圍與專案現況一致。

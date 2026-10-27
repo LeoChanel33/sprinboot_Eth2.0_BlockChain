@@ -1,4 +1,4 @@
-package com.example.demo.eth20.service;
+package com.example.demo.eth20.service.jpa;
 
 import com.example.demo.eth20.entity.PlatformAccount;
 import com.example.demo.eth20.entity.UserAccount;

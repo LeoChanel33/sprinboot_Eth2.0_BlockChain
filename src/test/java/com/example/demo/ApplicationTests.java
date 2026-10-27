@@ -25,6 +25,38 @@ class ApplicationTests {
 	}
 
     @Test
+    void apiRoutesReachTheirInjectedBusinessServices() throws Exception {
+        HttpClient client = HttpClient.newHttpClient();
+        String base = "http://localhost:" + port;
+
+        var admin = client.send(HttpRequest.newBuilder()
+                .uri(URI.create(base + "/eth/admin/api/node/status?nodeId=node-1"))
+                .GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, admin.statusCode());
+        assertTrue(admin.body().contains("\"nodeId\":\"node-1\""));
+
+        var user = client.send(HttpRequest.newBuilder()
+                .uri(URI.create(base + "/eth/client/api/contract/info"))
+                .GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, user.statusCode());
+        assertTrue(user.body().contains("Sepolia"));
+
+        var eth = client.send(HttpRequest.newBuilder()
+                .uri(URI.create(base + "/eth/core/api/contract/deploy?contractName=demo"))
+                .POST(HttpRequest.BodyPublishers.noBody()).build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, eth.statusCode());
+        assertTrue(eth.body().contains("\"contractName\":\"demo\""));
+
+        var invalidKey = client.send(HttpRequest.newBuilder()
+                .uri(URI.create(base + "/eth/core/api/wallet/auth"))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString("{\"privateKey\":\"invalid\"}"))
+                .build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(400, invalidKey.statusCode());
+        assertTrue(invalidKey.body().contains("\"status\":400"));
+    }
+
+    @Test
     void serverErrorReturnsJsonEvenForBrowserRequests() throws Exception {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create("http://localhost:" + port + "/eth/admin/api/test/error-500"))

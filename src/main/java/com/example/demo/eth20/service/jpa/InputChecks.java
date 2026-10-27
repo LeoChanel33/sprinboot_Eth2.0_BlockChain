@@ -1,4 +1,4 @@
-package com.example.demo.eth20.service;
+package com.example.demo.eth20.service.jpa;
 
 final class InputChecks {
     private InputChecks() {}

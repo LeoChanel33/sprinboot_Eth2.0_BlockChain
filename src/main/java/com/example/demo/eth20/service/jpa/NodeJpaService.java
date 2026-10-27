@@ -1,4 +1,4 @@
-package com.example.demo.eth20.service;
+package com.example.demo.eth20.service.jpa;
 
 import com.example.demo.eth20.entity.BlockchainNode;
 import com.example.demo.eth20.repository.BlockchainNodeRepository;
