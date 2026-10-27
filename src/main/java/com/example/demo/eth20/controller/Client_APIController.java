@@ -1,5 +1,9 @@
 package com.example.demo.eth20.controller;
 
+import com.example.demo.eth20.service.Sevices;
+import com.example.demo.eth20.entity.BlockchainNode;
+import org.springframework.http.HttpStatus;
+
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -26,6 +30,55 @@ import java.util.*;
 @RequestMapping("eth/client/api")
 @Tag(name = "ETH 使用者操作介面", description = "包含錢包管理、轉帳、合約交互與節點認證功能")
 public class Client_APIController {
+
+	private final Sevices sevices;
+
+	public Client_APIController(Sevices sevices) {
+		this.sevices = sevices;
+	}
+
+	@Operation(summary = "註冊使用者，可同時建立外部平台帳號關聯")
+	@PostMapping("/users/register")
+	@ResponseStatus(HttpStatus.CREATED)
+	public Sevices.UserView registerUser(
+			@RequestBody Sevices.Registration request) {
+		return sevices.register(request);
+	}
+
+	@GetMapping("/users/{userId}")
+	public Sevices.UserView getUser(@PathVariable Long userId) {
+		return sevices.getUser(userId);
+	}
+
+	@PostMapping("/nodes")
+	@ResponseStatus(HttpStatus.CREATED)
+	public BlockchainNode registerNode(
+			@RequestBody Sevices.NodeRegistration request) {
+		return sevices.registerNode(request);
+	}
+
+	@GetMapping("/nodes/{nodeId}")
+	public BlockchainNode getRegisteredNode(@PathVariable String nodeId) {
+		return sevices.getNode(nodeId);
+	}
+
+	@PutMapping("/nodes/{nodeId}/status")
+	public BlockchainNode updateNodeStatus(@PathVariable String nodeId,
+			@RequestBody Sevices.NodeStatusUpdate request) {
+		return sevices.updateNodeStatus(nodeId, request);
+	}
+
+	@PostMapping("/users/{userId}/platforms")
+	@ResponseStatus(HttpStatus.CREATED)
+	public Sevices.PlatformView linkPlatform(@PathVariable Long userId,
+			@RequestBody Sevices.PlatformLink request) {
+		return sevices.linkPlatform(userId, request);
+	}
+
+	@GetMapping("/users/{userId}/platforms")
+	public List<Sevices.PlatformView> getPlatforms(@PathVariable Long userId) {
+		return sevices.getPlatforms(userId);
+	}
 
 	private static final Logger log = (Logger) LoggerFactory.getLogger(Client_APIController.class);
 	@Autowired

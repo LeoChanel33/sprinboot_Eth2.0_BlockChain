@@ -1,195 +1,130 @@
-VS Code 開發與啟動：請參閱 [VSCODE.md](VSCODE.md)。
+﻿# ETH 2.0 Blockchain Backend API
 
-## 2026-10-27 更新：VS Code 開發環境與 API 錯誤處理
+以 Java 17、Spring Boot 4.0.3 與 Maven Wrapper 建立的後端示範專案，提供 JPA 使用者資料、節點登錄與外部平台帳號關聯功能。
 
-### 開發與啟動
+## 快速啟動
 
-- 新增 VS Code 推薦擴充套件、F5 啟動／除錯、Maven 測試與打包工作設定。
-- 根目錄專案使用 **Java 17、Spring Boot 4.0.3、Maven Wrapper**，不需另外安裝 Maven。
-- 新增 `local` profile，停用 Kafka listener，方便在尚未啟動 Kafka、Redis 或資料庫時開發 HTTP API；Kafka／Redis 測試端點仍需要對應服務。
-- 修正 Windows Maven Wrapper 在一般目錄讀取空的 `Target` 屬性時無法啟動的問題。
-- 將 AOP starter 改為 Spring Boot 4 對應的 AspectJ starter，更新 springdoc 至 3.0.2，並移除重複的 Lombok 相依設定。
-- 移除 `ErrorResponse` 的重複空建構子，修正編譯錯誤並保留 Lombok 產生的完整建構子。
-
-在 VS Code 開啟根目錄，等待 Maven 匯入完成，選擇 **Spring Boot: Local** 並按 **F5**。也可以在 PowerShell 執行：
+1. 安裝 Java 17，啟動 PostgreSQL。
+2. 設定資料庫密碼，例如在 PowerShell 執行 `$env:DB_PASSWORD = '你的資料庫密碼'`。
+3. 在專案根目錄執行：
 
 ```powershell
 .\mvnw.cmd spring-boot:run '-Dspring-boot.run.profiles=local'
 ```
 
-服務啟動後才可開啟 [Swagger UI](http://localhost:8080/swagger-ui/index.html)。若出現 `ERR_CONNECTION_REFUSED`，請先確認服務已啟動且仍在執行。
+也可在 VS Code 選擇 **Spring Boot: Local** 並按 **F5**。詳細設定請見 [VSCODE.md](VSCODE.md)。
 
-### API 例外處理
+啟動後開啟 [Swagger UI](http://localhost:8080/swagger-ui/index.html)，OpenAPI 文件位於 `/v3/api-docs`。
+`local` profile 停用 Kafka listener；應用程式仍需要 PostgreSQL，Redis 與 Kafka 測試端點需要各自服務。
 
-- 移除過度限制的 `@ComponentScan`，使用 `@SpringBootApplication` 預設掃描，讓 `exception` 套件內的 `GlobalExceptionHandler` 正常載入。
-- 明確設定錯誤回應為 `application/json`，讓瀏覽器使用 `Accept: text/html` 呼叫時也能取得 JSON 錯誤內容。
-- `/eth/admin/api/test/error-500` 刻意拋出例外，預期狀態為 **HTTP 500**，並回傳以下結構；`timestamp` 隨請求時間變動：
+## 資料庫設定
+
+設定檔為 [application.properties](src/main/resources/application.properties)。
+
+| 項目 | 預設值 | 可覆寫的環境變數 |
+| --- | --- | --- |
+| JDBC URL | `jdbc:postgresql://localhost:5432/postgres` | `DB_URL` |
+| 帳號 | `postgres` | `DB_USERNAME` |
+| 密碼 | 無 | `DB_PASSWORD` |
+
+也可在根目錄建立 `.local/database.properties`，內容為 `spring.datasource.password=你的資料庫密碼`。
+此檔由 Spring 自動匯入，已透過 `.gitignore` 排除；環境變數 `DB_PASSWORD` 可優先覆寫密碼。
+
+`spring.jpa.hibernate.ddl-auto=none`，啟動時不會自動建立或修改資料表。
+使用 JPA API 前需先建立 Entity 對應的 `user_accounts`、`blockchain_nodes`、`platform_accounts` 資料表與約束，或加入 migration。
+目前沒有附正式環境的建表 migration。僅限本機開發、確認目標資料庫後，可自行使用 `ddl-auto=update` 建表。
+
+測試透過 `src/test/resources/application-local.properties` 使用獨立 H2 記憶體資料庫，不會連線至 PostgreSQL。
+
+## 服務架構
+
+```text
+Client_APIController
+  └─ Sevices（統一入口與交易協調）
+      ├─ UserJpaService → UserAccountRepository → UserAccount
+      ├─ NodeJpaService → BlockchainNodeRepository → BlockchainNode
+      └─ CrossPlatformJpaService → PlatformAccountRepository → PlatformAccount
+```
+
+[Sevices](src/main/java/com/example/demo/eth20/service/Sevices.java) 使用 `@Service`、`@RequiredArgsConstructor` 與 `private final` 欄位，由 Spring 自動注入各功能服務。
+各服務透過 Spring Data `JpaRepository` 存取資料；Entity 使用 Lombok `@Getter` 與 JPA 必要的 protected 無參數建構子，保留指定業務欄位的建構子。
+
+主要流程 `Sevices.register(...)` 在同一筆交易中建立使用者與選填的平台關聯；綁定失敗時註冊也會回滾。
+帳號名稱與 email 會去除前後空白並轉小寫，另有重複檢查與資料庫唯一約束。節點狀態更新使用 `@Version` 處理並行寫入衝突。
+
+## JPA API
+
+所有下列端點的前綴為 `/eth/client/api`：
+
+| 方法 | 路徑 | 功能 |
+| --- | --- | --- |
+| POST | `/users/register` | 註冊，可一併綁定平台 |
+| GET | `/users/{userId}` | 查詢使用者 |
+| POST | `/nodes` | 登錄節點 |
+| GET | `/nodes/{nodeId}` | 查詢節點 |
+| PUT | `/nodes/{nodeId}/status` | 更新節點狀態 |
+| POST | `/users/{userId}/platforms` | 綁定平台 |
+| GET | `/users/{userId}/platforms` | 查詢平台關聯 |
+
+註冊請求（不需要平台時省略 `platform`）：
 
 ```json
 {
-  "status": 500,
-  "message": "系統發生異常，請聯繫管理員",
-  "timestamp": 1793038777261
+  "username": "leo",
+  "email": "leo@example.com",
+  "platform": { "platform": "web", "externalAccountId": "web-user-001" }
 }
 ```
 
-### 驗證結果
+節點登錄請求：
 
-- 執行 `.\mvnw.cmd test`：2 項測試通過，包含服務載入及瀏覽器請求的 JSON 500 回歸測試。
-- 實際確認 Swagger UI、`/v3/api-docs`、`/eth/client/api/contract/info` 回傳 HTTP 200。
-- 實際確認 `/eth/admin/api/test/error-500` 回傳 HTTP 500 與 JSON 錯誤內容。
+```json
+{ "nodeId": "sepolia-1", "rpcUrl": "http://localhost:8545", "chainId": 11155111 }
+```
 
-完整安裝、啟動及疑難排解步驟請見 [VSCODE.md](VSCODE.md)。`ai_springagent/` 為另一個獨立 Gradle 專案，本次 VS Code 工作區設定預設不匯入它。
+狀態更新請求：
 
----
+```json
+{ "status": "ONLINE" }
+```
 
-🚀 ETH 2.0 Blockchain Backend API
-這是一個基於 Spring Boot 4.0.3 與 Java 17 構建的區塊鏈後端示範專案，專為 Ethereum 2.0 網路整合設計。目前多數區塊鏈 API 使用示範回傳值；下方列出功能規劃與整合方向，實際實作請以原始碼為準。
+可用狀態為 `REGISTERED`、`SYNCING`、`ONLINE`、`OFFLINE`。
+單獨綁定平台的請求為 `{"platform":"web","externalAccountId":"web-user-001"}`。
+每個使用者於同一平台只能綁定一個帳號，同一平台的外部帳號也只能綁定一名使用者。
 
-📖 目錄
-核心功能
+成功建立回傳 201；業務輸入驗證與 JSON 格式錯誤為 400、資料不存在為 404、重複資料或寫入衝突為 409。
+例外回應透過 `GlobalExceptionHandler` 統一為 JSON，包含 `status`、`message`、`timestamp`。
 
-技術棧
+## 其他測試端點
 
-API 快速測試
+| 方法 | 路徑 | 說明 |
+| --- | --- | --- |
+| GET | `/eth/client/api/redis` | Redis 計數測試，預設 `localhost:6379` |
+| GET | `/eth/client/api/kafka` | 發送訊息至 `test-topic`，預設 broker `localhost:9092` |
+| GET | `/eth/client/api/contract/info` | 合約與網路資訊示範回傳 |
+| GET | `/eth/admin/api/test/error-500` | 刻意拋出例外，驗證 JSON 500 回應 |
 
-系統架構
+## 測試與打包
 
-部署流程 (Docker & K8s)
+```powershell
+.\mvnw.cmd test
+.\mvnw.cmd package
+```
 
-全端整合
+目前包含 6 項測試：應用程式啟動、瀏覽器請求 JSON 500 回應、註冊與平台綁定、交易回滾、重複帳號與不存在的使用者、節點狀態持久化與輸入驗證。
 
-未來擴充計畫
+## 實作範圍
 
-🛠 核心功能
-1. 🔐 ETH 2.0 權限認證 (Identity & Access Management)
-JWT 整合安全認證：採用非對稱加密技術驗證使用者身份，確保 API 呼叫安全。
+- 使用者註冊目前建立帳號資料，尚未實作密碼、登入、JWT、RBAC 或錢包簽名驗證。
+- 跨平台功能目前儲存外部帳號關聯，尚未驗證帳號所有權或串接平台 API。
+- 節點功能目前維護登錄與狀態資料，尚未執行 RPC 健康檢查；既有區塊鏈 Controller 多數仍使用示範回傳值。
+- 公開部署前需加入身分驗證與存取權限。Web3j、跨鏈、合約部署、WebSocket 與 Kubernetes 自動化屬後續整合方向。
+- `compose.yaml` 目前定義 MySQL、Oracle、SQL Server，沒有 PostgreSQL、Redis 或 Kafka，需另行啟動服務。
+- `ai_springagent/` 為另一個獨立 Gradle 專案。
 
-RBAC 權限控管：細分「超級管理員」、「節點營運者」與「普通用戶」角色。
+## 2026-10-28 更新
 
-Web3 錢包登入：支援 Web3.js / Ethers.js 進行簽名驗證（Sign-In with Ethereum）。
-
-2. 💸 資產轉帳與申請 (Asset Management)
-ETH/ERC-20 轉帳：高度封裝 Web3j 介面，支援 Gas Fee 自動估算與隨機數 (Nonce) 管理。
-
-審核工作流：內建異步審核機制，用於大額轉帳或測試幣撥發的後台管理與 Log 追蹤。
-
-3. 📜 智慧合約與節點部署 (Smart Contract & DevOps)
-自動化部署：透過 API 一鍵部署編譯後的 Solidity 合約至 ETH 2.0 測試網/主網。
-
-K8s 節點監控：即時監測運行在 Pod 內的 Beacon Node 與 Execution Node 狀態。
-
-💻 技術棧
-後端核心：Spring Boot 3.4 (Java 17)
-
-區塊鏈交互：Web3j, Ethers-Java, Spring-Cloud-Ethereum
-
-資料庫：PostgreSQL (AWS RDS), Redis (ElastiCache)
-
-容器化與編排：Docker, Kubernetes (EKS)
-
-雲端基礎設施：AWS (EC2, EKS, Route53, IAM)
-
-📡 API 快速測試
-在專案啟動後，你可以使用以下指令快速驗證服務狀態：
-
-📌 服務健康檢查
-Bash
-curl -X GET http://localhost:8080/eth/hello
-預期回應： ETH 2.0 Module is Running!
-
-📌 取得網路狀態 (範例)
-Bash
-curl -X GET http://localhost:8080/api/v1/eth/status
-🏗 系統架構
-本專案採用微服務架構，確保區塊鏈交易的高併發處理能力與數據一致性。
-
-🚢 部署流程 (Docker & K8s)
-1. 本地打包與 Docker 化
-Bash
-# 編譯 Jar 檔
-./mvnw clean package -DskipTests
-
-# 構建 Docker 映像檔
-docker build -t eth-api:v1.0 .
-2. Kubernetes Pod 部署範例
-本專案已預載 deployment.yaml，確保 Pod 在 AWS EKS 叢集內具備自動修復與擴展能力：
-
-YAML
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: eth-api-service
-spec:
-  replicas: 2
-  selector:
-    matchLabels:
-      app: eth-api
-  template:
-    metadata:
-      labels:
-        app: eth-api
-    spec:
-      containers:
-      - name: spring-boot-app
-        image: <your-ecr-repo>/eth-api:latest
-        ports:
-        - containerPort: 8080
-🔗 全端整合 (Full-stack Integration)
-本專案作為 Nuxt_Vue3_BlockChain 的數據供應核心：
-
-SSR 支援：針對 Nuxt 3 的 Server-side Rendering 提供高速 API 響應。
-
-WebSocket 實時推送：轉帳確認或合約狀態變更時，透過 Socket 實時同步至 Vue 3 前端。
-
-AWS CloudFront：全端靜態與動態內容均通過 AWS CDN 進行加速並配置 CORS 安全策略。
-
-🚀 未來擴充計畫
-Layer 2 支援：計畫引進 Arbitrum / Optimism SDK 以大幅降低用戶 Gas 成本。
-
-NFT 市場模組：擴充 ERC-721 與 ERC-1155 的鑄造、掛單與版稅管理功能。
-
-多鏈跨鏈橋：增加對 BSC (Binance Smart Chain) 或 Polygon 的跨鏈數據監測。
-
-## 📅 2026.05.11 更新日誌：基礎設施增強
-
-本次更新完成了核心通訊組件的整合與 Docker 本地環境配置。
-
-### 1. 🚀 Kafka 非同步通訊整合
-* **配置優化**：實作 `KafkaConfig`，完成 `ProducerFactory` 與 `ConsumerFactory` 配置。
-* **序列化機制**：統一採用 Kafka 官方 `StringSerializer` 與 `StringDeserializer` 以解決類別轉換異常。
-* **監聽機制**：實作 `@KafkaListener` 異步監聽 `test-topic`，成功對接區塊鏈交易模擬數據。
-
-### 2. ⚡ Redis 快取與原子操作
-* **連線測試**：整合 `StringRedisTemplate` 成功連接 Docker 端的 Redis 服務。
-* **計數器實作**：透過 Redis 實作 `/redis` 測試 API，驗證在高併發環境下的原子性計數功能。
-
-### 3. 🐳 Docker 容器化配置
-* **編排部署**：完成 Kafka、Zookeeper 與 Redis 的 `docker-compose` 配置。
-* **數據持久化**：配置 Named Volumes (如 `redis_data`) 確保容器重啟後數據不丟失。
-
-### 4. 📝 日誌持久化系統
-* **自動存檔**：配置 Logback 自動將系統日誌寫入 `logs/eth2_system.log`。
-* **滾動策略**：支援按檔案大小 (10MB) 與保留天數 (7天) 自動切分日誌檔案。
-
----
-
-## 📡 API 快速測試
-
-在專案啟動後，可使用以下指令驗證服務：
-
-| 功能 | 指令 | 預期回應 |
-| :--- | :--- | :--- |
-| **健康檢查** | `curl -X GET http://localhost:8080/eth/hello` | `ETH 2.0 Module is Running!` |
-| **Kafka 測試** | `curl -X GET http://localhost:8080/eth/client/api/kafka` | 觸發 Producer 並由 Listener 印出 Log |
-| **Redis 測試** | `curl -X GET http://localhost:8080/eth/client/api/redis` | `Redis 連線成功！目前計數值為: [X]` |
-
----
-
-
-👨‍💻 維護者
-Project Owner: Leo
-
-GitHub: [Your Profile Link]
-
-Status: Development Phase (Sprint 1)
+- 建立統一 `Sevices` 入口與三個 JPA 功能服務、Entity、Repository。
+- 新增使用者、節點、平台關聯 API，以及交易與衝突處理。
+- 啟用 PostgreSQL JDBC 連線，測試保留獨立 H2；本機密碼移至 Git 忽略的設定檔。
+- 更新 README，使啟動流程、功能範圍與專案現況一致。

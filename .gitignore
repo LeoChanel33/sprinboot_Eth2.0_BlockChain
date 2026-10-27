@@ -37,3 +37,6 @@ build/
 !.vscode/tasks.json
 .cache/
 /.metadata/
+
+# Local database credentials
+/.local/
