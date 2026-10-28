@@ -34,10 +34,10 @@ public class Eth_APIController {
     }
 
     // 3. 節點溝通與同步 (Node Sync Status)
-    @Operation(summary = "3. 節點溝通狀態", description = "取得當前後端連結之 ETH 節點的最新區塊與同步進度")
-    @GetMapping("/node/info")
-    public Map<String, Object> getNodeInfo() {
-        return ethService.getNodeInfo();
+    @Operation(summary = "3. 節點溝通狀態", description = "依注入的節點設定查詢最新區塊與同步狀態；未指定 nodeId 時查詢全部節點")
+    @GetMapping({"/node/info", "/node/status"})
+    public Map<String, Object> getNodeInfo(@RequestParam(required = false) String nodeId) {
+        return ethService.checkNodeStatus(nodeId);
     }
 
     // 4. 離線簽署與發送交易 (Offline Signing)

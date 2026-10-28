@@ -10,7 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.annotation.KafkaListener;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
 import com.example.demo.eth20.entity.BlockchainNode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -18,8 +18,8 @@ import org.springframework.stereotype.Service;
 /** Client API business logic. Blockchain operations retain their existing demo behavior. */
 @Service
 @RequiredArgsConstructor
-@Slf4j
 public class ClientApiService {
+    private final Logger log;
     private final UserJpaService users;
     private final NodeJpaService nodes;
     private final CrossPlatformJpaService platforms;
@@ -96,7 +96,6 @@ public class ClientApiService {
     @KafkaListener(topics = "test-topic", groupId = "leo-group")
     public void listen(String message) {
         log.info("【Kafka 監聽成功】接收到 ETH 交易數據: {}", message);
-        System.out.println("收到 Kafka 訊息並開始處理: " + message);
         // 如果是錯誤資訊可以用 log.error
         if (message.contains("ERROR")) {
             log.error("偵測到異常交易狀態！內容: {}", message);

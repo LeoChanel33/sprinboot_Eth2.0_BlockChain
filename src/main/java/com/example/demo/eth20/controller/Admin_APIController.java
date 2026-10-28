@@ -20,9 +20,41 @@ public class Admin_APIController {
 
     private final AdminApiService adminService;
 
+    @Operation(summary = "查詢節點帳戶 ETH 餘額", description = "未指定 nodeId 時查全部節點；可指定 address，否則查 eth_accounts 公開帳戶")
+    @GetMapping("/node/balance")
+    public Map<String, Object> getNodeBalances(@RequestParam(required = false) String nodeId,
+            @RequestParam(required = false) String address) {
+        return adminService.queryNodes(nodeId, AdminApiService.NodeQuery.BALANCE, address);
+    }
+
+    @Operation(summary = "查詢執行層與 Beacon 同步狀態")
+    @GetMapping("/node/sync")
+    public Map<String, Object> getNodeSync(@RequestParam(required = false) String nodeId) {
+        return adminService.queryNodes(nodeId, AdminApiService.NodeQuery.SYNC, null);
+    }
+
+    @Operation(summary = "查詢節點版本與身分資訊")
+    @GetMapping("/node/identity")
+    public Map<String, Object> getNodeIdentity(@RequestParam(required = false) String nodeId) {
+        return adminService.queryNodes(nodeId, AdminApiService.NodeQuery.IDENTITY, null);
+    }
+
+    @Operation(summary = "查詢 Validator 鏈上狀態", description = "validatorId 可為索引或公鑰；未指定時列出 Beacon 鏈驗證者，非本機 Validator 程序健康狀態")
+    @GetMapping("/node/validators")
+    public Map<String, Object> getValidators(@RequestParam(required = false) String nodeId,
+            @RequestParam(required = false) String validatorId) {
+        return adminService.queryNodes(nodeId, AdminApiService.NodeQuery.VALIDATORS, validatorId);
+    }
+
+    @Operation(summary = "查詢執行層與 Beacon Peer 數量")
+    @GetMapping("/node/peers")
+    public Map<String, Object> getPeers(@RequestParam(required = false) String nodeId) {
+        return adminService.queryNodes(nodeId, AdminApiService.NodeQuery.PEERS, null);
+    }
+
     @Operation(summary = "1. 遠端節點狀態認證", description = "檢查 AWS EKS 上的 Geth 或 Erigon 節點連線是否正常")
     @GetMapping("/node/status")
-    public Map<String, Object> checkNodeStatus(@RequestParam String nodeId) {
+    public Map<String, Object> checkNodeStatus(@RequestParam(required = false) String nodeId) {
         return adminService.checkNodeStatus(nodeId);
     }
 

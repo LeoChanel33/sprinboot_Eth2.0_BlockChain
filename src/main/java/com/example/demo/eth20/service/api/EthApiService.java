@@ -2,10 +2,17 @@ package com.example.demo.eth20.service.api;
 
 import java.util.*;
 import org.springframework.stereotype.Service;
+import com.example.demo.eth20.node.EthereumNodeRegistry;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.client.RestClientException;
 
 /** Eth API business logic. Blockchain operations retain their existing demo behavior. */
 @Service
+@Slf4j
+@RequiredArgsConstructor
 public class EthApiService {
+    private final EthereumNodeRegistry nodes;
 
     public Map<String, Object> authPrivateKey(Map<String, String> request) {
         String pkey = request.get("privateKey");
@@ -29,16 +36,32 @@ public class EthApiService {
     }
 
     public Map<String, Object> getNodeInfo() {
-        // 模擬 500 錯誤：如果 Web3j 連不到 AWS 上的 Geth 節點
-        boolean isNodeDown = true; // 模擬故障
-        if (isNodeDown) {
-            throw new RuntimeException("無法連結至 ETH 遠端節點 (JSON-RPC Timeout)");
-        }
+        return nodes.defaultClient().info();
+    }
 
-        Map<String, Object> info = new HashMap<>();
-        info.put("clientVersion", "Geth/v1.13.0/linux-amd64");
-        info.put("networkId", 1); // Mainnet
-        return info;
+    public Map<String, Object> checkNodeStatus(String nodeId) {
+        if (nodeId == null || nodeId.isBlank()) {
+            List<Map<String, Object>> statuses = nodes.clients().keySet().stream()
+                    .sorted().map(this::checkNodeStatus).toList();
+            return Map.of("nodes", statuses);
+        }
+        var client = nodes.client(nodeId);
+        try {
+            Map<String, Object> status = client.status();
+            log.info("Ethereum node status: nodeId={}, status={}, latestBlock={}, peers={}",
+                    nodeId, status.get("status"), status.get("latestBlock"), status.get("peers"));
+            return status;
+        } catch (RestClientException ex) {
+            log.warn("Ethereum node {} RPC unavailable ({})", nodeId, ex.getClass().getSimpleName());
+            Map<String, Object> status = new HashMap<>();
+            status.put("nodeId", nodeId);
+            status.put("reachable", false);
+            status.put("status", "UNAVAILABLE");
+            status.put("isSynced", null);
+            status.put("peers", null);
+            status.put("latestBlock", null);
+            return status;
+        }
     }
 
     public String sendRawTransaction(Map<String, String> txData) {
