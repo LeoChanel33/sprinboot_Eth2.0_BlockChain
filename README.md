@@ -1,57 +1,5 @@
 # ETH 2.0 Blockchain Backend API
 
-## 2026-11-12 更新：Ollama 聊天與長期記憶
-
-前端專案：[nuxt_Vue3_BlockChain](https://github.com/LeoChanel33/nuxt_Vue3_BlockChain)，本機入口為 <http://localhost:3000/blockMain>。本後端以 `/ws/chat` 提供 WebSocket 聊天、記憶操作與 Ollama 串流。
-
-### 已實作
-
-- 預設使用本機 Ollama `http://localhost:11434` 的 `qwen2.5-coder:7b`。可用 `CHAT_OLLAMA_URL`、`CHAT_MODEL` 覆寫。
-- 聊天初始化接受帳號、level、錢包地址與連線狀態白名單，不轉送密碼或 Token。前端自述資料不提供授權能力。
-- 短期資料存在 WebSocket Session attributes；登入載入主題清單並恢復最近一段對話，其他主題可由前端選取。
-- MySQL `chat_memory_conversation`、`chat_memory_message` 保存長期歷史；每次詢問記錄類別與主要索引。分類採關鍵字規則，不是 AI 語意分類。
-- 每輪問答做檢查點。登出先停止推論、完成資料庫交易、清除 Session，再回傳 `saved:true`；失敗則不清除待儲存內容，重試以訊息 UUID 去重。
-- 歷史讀寫依 owner key 隔離；分頁、類別篩選與主題／索引搜尋均已實作。失敗及中斷回覆獨立標記，不當成完整問答送入模型。
-- RAG 的 `rag_knowledge_base`、`rag_document`、`rag_chunk`、`rag_embedding` 四表及限制已建立；尚未實作 embedding、語意檢索或聊天 RAG 整合。
-
-### 資料庫與啟動
-
-目前應用設定與建表腳本使用 MySQL 8.4。`compose.yaml` 從 Git 忽略的 `.local/docker-mysql.env` 取得 `MYSQL_DATABASE`、`MYSQL_USER`、`MYSQL_PASSWORD`、`MYSQL_ROOT_PASSWORD`；請自行建立，不要將真實密碼提交。Spring Boot 的密碼另以 `DB_PASSWORD` 或 `.local/database.properties` 提供。
-
-首次初始化空的 MySQL volume 時會套用 `database/eth-schema.sql`；聊天與 RAG 表須另外套用，Spring Boot 的 `ddl-auto=none` 不會自動建表。
-
-```powershell
-docker compose up -d mysql
-# 先確認目標資料庫；以下沿用容器設定且不將密碼放入命令列。
-Get-Content -Raw database/chat-memory-schema.sql | docker exec -i mysql sh -c 'export MYSQL_PWD=$MYSQL_PASSWORD; exec mysql --default-character-set=utf8mb4 -u$MYSQL_USER $MYSQL_DATABASE'
-Get-Content -Raw database/rag-schema.sql | docker exec -i mysql sh -c 'export MYSQL_PWD=$MYSQL_PASSWORD; exec mysql --default-character-set=utf8mb4 -u$MYSQL_USER $MYSQL_DATABASE'
-.\mvnw.cmd spring-boot:run '-Dspring-boot.run.profiles=local'
-```
-
-兩份新增 SQL 不包含 DROP；`IF NOT EXISTS` 不會自動修復不同版本的同名表，升級既有結構須另寫 migration。一般 JPA API 需要的其他資料表仍依原有說明準備。
-
-### 身分與容量限制
-
-`local` profile 明確啟用 `chat.memory.allow-demo=true`，以帳號＋瀏覽器隨機識別碼隔離本機示範歷史。此模式不是正式帳號認證，不適用公開服務或共用電腦，也不支援跨裝置自動共用紀錄。正式模式預設停用 demo，須由伺服器驗證並提供穩定使用者 Principal；`CHAT_REQUIRE_AUTH=true` 也可拒絕匿名連線，但不會自動建立登入機制。
-
-Session 正常截短至最多 200 則、約 100000 字元；每次模型上下文最多 20 則完整訊息、歷史加問題約 48000 字元。這是字元限制，並非 token 或整個 JVM 的記憶體上限。WebSocket 閒置 30 分鐘關閉，推論上限 120 秒；工作池 4 個 worker，等待佇列 16 個工作。
-
-Redis 尚未接入聊天記憶；目前仍使用後端本機 Session。Kafka 尚未接入聊天事件、摘要或偏好整理；local profile 停用既有 Kafka listener。未來可用 Redis 放短期上下文、MySQL 做永久保存、Kafka 派送背景工作。現階段尚未自動產生跨主題的使用者偏好摘要。
-
-### 驗證與詳細設計
-
-```powershell
-.\mvnw.cmd '-Dtest=ChatMemoryServiceTest,ChatSocketHandlerTest' test
-```
-
-測試涵蓋儲存與恢復、不同 owner 隔離、未驗證身分拒絕、交易失敗保留 Session、重試去重、分類索引、分頁與上下文上限。另已實測執行中的 WebSocket → Ollama → MySQL → 登出／再次登入恢復；預設測試不依賴本機 Ollama。
-
-- [聊天 Session、歷史與 WebSocket 契約](docs/chat-memory.md)
-- [RAG 資料設計](docs/rag-design.md)
-- [聊天建表 SQL](database/chat-memory-schema.sql)／[RAG 建表 SQL](database/rag-schema.sql)
-
-
-
 以 Java 17、Spring Boot 4.0.3 與 Maven Wrapper 建立的後端示範專案，提供 JPA 使用者資料、節點登錄與外部平台帳號關聯功能。
 
 ## 快速啟動
@@ -329,3 +277,53 @@ Console 與 `logs/eth2.0-app.log` 的時間格式為 `yyyy-MM-dd HH:mm:ss.SSS`�
 - 停止容器可使用 docker compose down；請保留 volume 以保留資料。
 - 原 PostgreSQL 備份：.local/postgres-before-mysql.sql；原資料目錄 D:/PostgreSQL/data 保留。
 - MySQL 資料庫採 utf8mb4_bin，保留 account 大小寫區別。
+
+## 2026-11-12 更新：Ollama 聊天與長期記憶
+
+前端專案：[nuxt_Vue3_BlockChain](https://github.com/LeoChanel33/nuxt_Vue3_BlockChain)，本機入口為 <http://localhost:3000/blockMain>。本後端以 `/ws/chat` 提供 WebSocket 聊天、記憶操作與 Ollama 串流。
+
+### 已實作
+
+- 預設使用本機 Ollama `http://localhost:11434` 的 `qwen2.5-coder:7b`。可用 `CHAT_OLLAMA_URL`、`CHAT_MODEL` 覆寫。
+- 聊天初始化接受帳號、level、錢包地址與連線狀態白名單，不轉送密碼或 Token。前端自述資料不提供授權能力。
+- 短期資料存在 WebSocket Session attributes；登入載入主題清單並恢復最近一段對話，其他主題可由前端選取。
+- MySQL `chat_memory_conversation`、`chat_memory_message` 保存長期歷史；每次詢問記錄類別與主要索引。分類採關鍵字規則，不是 AI 語意分類。
+- 每輪問答做檢查點。登出先停止推論、完成資料庫交易、清除 Session，再回傳 `saved:true`；失敗則不清除待儲存內容，重試以訊息 UUID 去重。
+- 歷史讀寫依 owner key 隔離；分頁、類別篩選與主題／索引搜尋均已實作。失敗及中斷回覆獨立標記，不當成完整問答送入模型。
+- RAG 的 `rag_knowledge_base`、`rag_document`、`rag_chunk`、`rag_embedding` 四表及限制已建立；尚未實作 embedding、語意檢索或聊天 RAG 整合。
+
+### 資料庫與啟動
+
+目前應用設定與建表腳本使用 MySQL 8.4。`compose.yaml` 從 Git 忽略的 `.local/docker-mysql.env` 取得 `MYSQL_DATABASE`、`MYSQL_USER`、`MYSQL_PASSWORD`、`MYSQL_ROOT_PASSWORD`；請自行建立，不要將真實密碼提交。Spring Boot 的密碼另以 `DB_PASSWORD` 或 `.local/database.properties` 提供。
+
+首次初始化空的 MySQL volume 時會套用 `database/eth-schema.sql`；聊天與 RAG 表須另外套用，Spring Boot 的 `ddl-auto=none` 不會自動建表。
+
+```powershell
+docker compose up -d mysql
+# 先確認目標資料庫；以下沿用容器設定且不將密碼放入命令列。
+Get-Content -Raw database/chat-memory-schema.sql | docker exec -i mysql sh -c 'export MYSQL_PWD=$MYSQL_PASSWORD; exec mysql --default-character-set=utf8mb4 -u$MYSQL_USER $MYSQL_DATABASE'
+Get-Content -Raw database/rag-schema.sql | docker exec -i mysql sh -c 'export MYSQL_PWD=$MYSQL_PASSWORD; exec mysql --default-character-set=utf8mb4 -u$MYSQL_USER $MYSQL_DATABASE'
+.\mvnw.cmd spring-boot:run '-Dspring-boot.run.profiles=local'
+```
+
+兩份新增 SQL 不包含 DROP；`IF NOT EXISTS` 不會自動修復不同版本的同名表，升級既有結構須另寫 migration。一般 JPA API 需要的其他資料表仍依原有說明準備。
+
+### 身分與容量限制
+
+`local` profile 明確啟用 `chat.memory.allow-demo=true`，以帳號＋瀏覽器隨機識別碼隔離本機示範歷史。此模式不是正式帳號認證，不適用公開服務或共用電腦，也不支援跨裝置自動共用紀錄。正式模式預設停用 demo，須由伺服器驗證並提供穩定使用者 Principal；`CHAT_REQUIRE_AUTH=true` 也可拒絕匿名連線，但不會自動建立登入機制。
+
+Session 正常截短至最多 200 則、約 100000 字元；每次模型上下文最多 20 則完整訊息、歷史加問題約 48000 字元。這是字元限制，並非 token 或整個 JVM 的記憶體上限。WebSocket 閒置 30 分鐘關閉，推論上限 120 秒；工作池 4 個 worker，等待佇列 16 個工作。
+
+Redis 尚未接入聊天記憶；目前仍使用後端本機 Session。Kafka 尚未接入聊天事件、摘要或偏好整理；local profile 停用既有 Kafka listener。未來可用 Redis 放短期上下文、MySQL 做永久保存、Kafka 派送背景工作。現階段尚未自動產生跨主題的使用者偏好摘要。
+
+### 驗證與詳細設計
+
+```powershell
+.\mvnw.cmd '-Dtest=ChatMemoryServiceTest,ChatSocketHandlerTest' test
+```
+
+測試涵蓋儲存與恢復、不同 owner 隔離、未驗證身分拒絕、交易失敗保留 Session、重試去重、分類索引、分頁與上下文上限。另已實測執行中的 WebSocket → Ollama → MySQL → 登出／再次登入恢復；預設測試不依賴本機 Ollama。
+
+- [聊天 Session、歷史與 WebSocket 契約](docs/chat-memory.md)
+- [RAG 資料設計](docs/rag-design.md)
+- [聊天建表 SQL](database/chat-memory-schema.sql)／[RAG 建表 SQL](database/rag-schema.sql)
