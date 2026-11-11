@@ -1,10 +1,62 @@
 # ETH 2.0 Blockchain Backend API
 
+## 2026-11-12 更新：Ollama 聊天與長期記憶
+
+前端專案：[nuxt_Vue3_BlockChain](https://github.com/LeoChanel33/nuxt_Vue3_BlockChain)，本機入口為 <http://localhost:3000/blockMain>。本後端以 `/ws/chat` 提供 WebSocket 聊天、記憶操作與 Ollama 串流。
+
+### 已實作
+
+- 預設使用本機 Ollama `http://localhost:11434` 的 `qwen2.5-coder:7b`。可用 `CHAT_OLLAMA_URL`、`CHAT_MODEL` 覆寫。
+- 聊天初始化接受帳號、level、錢包地址與連線狀態白名單，不轉送密碼或 Token。前端自述資料不提供授權能力。
+- 短期資料存在 WebSocket Session attributes；登入載入主題清單並恢復最近一段對話，其他主題可由前端選取。
+- MySQL `chat_memory_conversation`、`chat_memory_message` 保存長期歷史；每次詢問記錄類別與主要索引。分類採關鍵字規則，不是 AI 語意分類。
+- 每輪問答做檢查點。登出先停止推論、完成資料庫交易、清除 Session，再回傳 `saved:true`；失敗則不清除待儲存內容，重試以訊息 UUID 去重。
+- 歷史讀寫依 owner key 隔離；分頁、類別篩選與主題／索引搜尋均已實作。失敗及中斷回覆獨立標記，不當成完整問答送入模型。
+- RAG 的 `rag_knowledge_base`、`rag_document`、`rag_chunk`、`rag_embedding` 四表及限制已建立；尚未實作 embedding、語意檢索或聊天 RAG 整合。
+
+### 資料庫與啟動
+
+目前應用設定與建表腳本使用 MySQL 8.4。`compose.yaml` 從 Git 忽略的 `.local/docker-mysql.env` 取得 `MYSQL_DATABASE`、`MYSQL_USER`、`MYSQL_PASSWORD`、`MYSQL_ROOT_PASSWORD`；請自行建立，不要將真實密碼提交。Spring Boot 的密碼另以 `DB_PASSWORD` 或 `.local/database.properties` 提供。
+
+首次初始化空的 MySQL volume 時會套用 `database/eth-schema.sql`；聊天與 RAG 表須另外套用，Spring Boot 的 `ddl-auto=none` 不會自動建表。
+
+```powershell
+docker compose up -d mysql
+# 先確認目標資料庫；以下沿用容器設定且不將密碼放入命令列。
+Get-Content -Raw database/chat-memory-schema.sql | docker exec -i mysql sh -c 'export MYSQL_PWD=$MYSQL_PASSWORD; exec mysql --default-character-set=utf8mb4 -u$MYSQL_USER $MYSQL_DATABASE'
+Get-Content -Raw database/rag-schema.sql | docker exec -i mysql sh -c 'export MYSQL_PWD=$MYSQL_PASSWORD; exec mysql --default-character-set=utf8mb4 -u$MYSQL_USER $MYSQL_DATABASE'
+.\mvnw.cmd spring-boot:run '-Dspring-boot.run.profiles=local'
+```
+
+兩份新增 SQL 不包含 DROP；`IF NOT EXISTS` 不會自動修復不同版本的同名表，升級既有結構須另寫 migration。一般 JPA API 需要的其他資料表仍依原有說明準備。
+
+### 身分與容量限制
+
+`local` profile 明確啟用 `chat.memory.allow-demo=true`，以帳號＋瀏覽器隨機識別碼隔離本機示範歷史。此模式不是正式帳號認證，不適用公開服務或共用電腦，也不支援跨裝置自動共用紀錄。正式模式預設停用 demo，須由伺服器驗證並提供穩定使用者 Principal；`CHAT_REQUIRE_AUTH=true` 也可拒絕匿名連線，但不會自動建立登入機制。
+
+Session 正常截短至最多 200 則、約 100000 字元；每次模型上下文最多 20 則完整訊息、歷史加問題約 48000 字元。這是字元限制，並非 token 或整個 JVM 的記憶體上限。WebSocket 閒置 30 分鐘關閉，推論上限 120 秒；工作池 4 個 worker，等待佇列 16 個工作。
+
+Redis 尚未接入聊天記憶；目前仍使用後端本機 Session。Kafka 尚未接入聊天事件、摘要或偏好整理；local profile 停用既有 Kafka listener。未來可用 Redis 放短期上下文、MySQL 做永久保存、Kafka 派送背景工作。現階段尚未自動產生跨主題的使用者偏好摘要。
+
+### 驗證與詳細設計
+
+```powershell
+.\mvnw.cmd '-Dtest=ChatMemoryServiceTest,ChatSocketHandlerTest' test
+```
+
+測試涵蓋儲存與恢復、不同 owner 隔離、未驗證身分拒絕、交易失敗保留 Session、重試去重、分類索引、分頁與上下文上限。另已實測執行中的 WebSocket → Ollama → MySQL → 登出／再次登入恢復；預設測試不依賴本機 Ollama。
+
+- [聊天 Session、歷史與 WebSocket 契約](docs/chat-memory.md)
+- [RAG 資料設計](docs/rag-design.md)
+- [聊天建表 SQL](database/chat-memory-schema.sql)／[RAG 建表 SQL](database/rag-schema.sql)
+
+
+
 以 Java 17、Spring Boot 4.0.3 與 Maven Wrapper 建立的後端示範專案，提供 JPA 使用者資料、節點登錄與外部平台帳號關聯功能。
 
 ## 快速啟動
 
-1. 安裝 Java 17，啟動 PostgreSQL。
+1. 安裝 Java 17，啟動 MySQL。
 2. 設定資料庫密碼，例如在 PowerShell 執行 `$env:DB_PASSWORD = '你的資料庫密碼'`。
 3. 在專案根目錄執行：
 
@@ -15,7 +67,7 @@
 也可在 VS Code 選擇 **Spring Boot: Local** 並按 **F5**。詳細設定請見 [VSCODE.md](VSCODE.md)。
 
 啟動後開啟 [Swagger UI](http://localhost:8080/swagger-ui/index.html)，OpenAPI 文件位於 `/v3/api-docs`。
-`local` profile 停用 Kafka listener；應用程式仍需要 PostgreSQL，Redis 與 Kafka 測試端點需要各自服務。
+`local` profile 停用 Kafka listener；應用程式仍需要 MySQL，Redis 與 Kafka 測試端點需要各自服務。
 
 ## 資料庫設定
 
@@ -23,8 +75,8 @@
 
 | 項目 | 預設值 | 可覆寫的環境變數 |
 | --- | --- | --- |
-| JDBC URL | `jdbc:postgresql://localhost:5432/postgres` | `DB_URL` |
-| 帳號 | `postgres` | `DB_USERNAME` |
+| JDBC URL | `jdbc:mysql://localhost:3306/eth20` | `DB_URL` |
+| 帳號 | `eth20` | `DB_USERNAME` |
 | 密碼 | 無 | `DB_PASSWORD` |
 
 也可在根目錄建立 `.local/database.properties`，內容為 `spring.datasource.password=你的資料庫密碼`。
@@ -34,7 +86,7 @@
 使用 JPA API 前需先建立 Entity 對應的 `user_accounts`、`blockchain_nodes`、`platform_accounts` 資料表與約束，或加入 migration。
 目前沒有附正式環境的建表 migration。僅限本機開發、確認目標資料庫後，可自行使用 `ddl-auto=update` 建表。
 
-測試透過 `src/test/resources/application-local.properties` 使用獨立 H2 記憶體資料庫，不會連線至 PostgreSQL。
+測試透過 `src/test/resources/application-local.properties` 使用獨立 H2 記憶體資料庫，不會連線至 MySQL。
 
 ## 服務架構
 
@@ -203,7 +255,7 @@ public class ExampleService {
 - 跨平台功能目前儲存外部帳號關聯，尚未驗證帳號所有權或串接平台 API。
 - JPA 節點功能維護登錄與狀態資料；RPC Config 另有啟動 chain ID 檢查及真實節點資訊查詢。其他區塊鏈 API 多數仍使用示範回傳值。
 - 公開部署前需加入身分驗證與存取權限。Web3j、跨鏈、合約部署、WebSocket 與 Kubernetes 自動化屬後續整合方向。
-- `compose.yaml` 目前定義 MySQL、Oracle、SQL Server，沒有 PostgreSQL、Redis 或 Kafka，需另行啟動服務。
+- `compose.yaml` 目前定義 MySQL 8.4，透過 .local/docker-mysql.env 載入密碼，使用固定 3306 port 與持久化 volume；Redis 與 Kafka 需另行啟動。
 - `ai_springagent/` 為另一個獨立 Gradle 專案。
 
 ## 2026-10-28 更新
@@ -214,13 +266,13 @@ public class ExampleService {
 - 註冊與平台綁定的交易由 `ClientApiService.registerUser(...)` 協調，失敗時一起回滾；Kafka listener 移至 Client 業務服務。
 - 執行 Maven `clean test`，7 項測試全部通過，涵蓋三組 HTTP API、錯誤回應與 JPA 交易。
 - 新增使用者、節點、平台關聯 API，以及交易與衝突處理。
-- 啟用 PostgreSQL JDBC 連線，測試保留獨立 H2；本機密碼移至 Git 忽略的設定檔。
+- 啟用 MySQL JDBC 連線，測試保留獨立 H2；本機密碼移至 Git 忽略的設定檔。
 - 更新 README，使啟動流程、功能範圍與專案現況一致。
 
 ## sql_data 四張資料表
 
 已新增 eth_admin、eth_client、eth_log、eth_client_detail 的 Entity、Repository、Service 與 CRUD API。
-建表腳本為 [database/eth-schema.sql](database/eth-schema.sql)，需在指定 PostgreSQL 手動執行。
+建表腳本為 [database/eth-schema.sql](database/eth-schema.sql)，在全新 MySQL volume 初始化時會自動執行。
 完整欄位決策、API 路徑、JSON 範例與更新規則請見 [docs/sql-data-api.md](docs/sql-data-api.md)。
 這組 API 與既有三張表的 API 分開，未搬移既有資料。
 
@@ -261,7 +313,19 @@ Console 與 `logs/eth2.0-app.log` 的時間格式為 `yyyy-MM-dd HH:mm:ss.SSS`�
 
 ## 常見問題
 
-- PostgreSQL `Connection refused`：確認資料庫已啟動，以及 `DB_URL` 的主機與連接埠；後續 Dialect 錯誤可能是連線失敗的連帶結果。
+- MySQL `Connection refused`：確認資料庫已啟動，以及 `DB_URL` 的主機與連接埠；後續 Dialect 錯誤可能是連線失敗的連帶結果。
 - 節點 `UNAVAILABLE`：檢查容器、主機連接埠映射與 RPC URL；容器運作不表示 RPC 已準備完成。
 - Beacon `el_offline=true`：檢查 Beacon 與 Execution 的 Engine API、JWT 設定與容器網路。
 - 資料表不存在：`ddl-auto=none`，四張 eth 資料表需先執行 `database/eth-schema.sql`，既有三張表則需另外準備。
+
+## MySQL Docker（2026-10-29）
+
+- 啟動：docker compose up -d mysql
+- 容器：mysql，映像 mysql:8.4，僅對本機公開 127.0.0.1:3306。
+- 資料庫：eth20；應用帳號：eth20；密碼由本機 .local/docker-mysql.env 管理，不提交至 Git。
+- Workbench：Standard TCP/IP、Hostname 127.0.0.1、Port 3306、Username eth20、Default Schema eth20。
+- 本機密碼檔：.local/docker-mysql.env、.local/database.properties，皆由 Git 忽略。
+- 首次啟動會建立四張 eth 資料表；資料保存在 Compose 的 mysql_data volume。
+- 停止容器可使用 docker compose down；請保留 volume 以保留資料。
+- 原 PostgreSQL 備份：.local/postgres-before-mysql.sql；原資料目錄 D:/PostgreSQL/data 保留。
+- MySQL 資料庫採 utf8mb4_bin，保留 account 大小寫區別。

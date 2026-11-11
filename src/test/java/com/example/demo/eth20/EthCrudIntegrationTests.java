@@ -28,8 +28,8 @@ class EthCrudIntegrationTests {
                 .method(method, json == null ? HttpRequest.BodyPublishers.noBody() : HttpRequest.BodyPublishers.ofString(json))
                 .build(), HttpResponse.BodyHandlers.ofString());
     }
-    @Test void schemaScriptCreatesAllTablesInPostgresCompatibilityMode() throws Exception {
-        try (var connection = java.sql.DriverManager.getConnection("jdbc:h2:mem:eth_schema;MODE=PostgreSQL", "sa", "");
+    @Test void schemaScriptCreatesAllTablesInMysqlCompatibilityMode() throws Exception {
+        try (var connection = java.sql.DriverManager.getConnection("jdbc:h2:mem:eth_schema;MODE=MySQL", "sa", "");
              var statement = connection.createStatement()) {
             String sql = java.nio.file.Files.readString(java.nio.file.Path.of("database/eth-schema.sql"));
             for (String command : sql.split(";"))
